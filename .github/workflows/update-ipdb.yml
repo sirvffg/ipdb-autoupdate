@@ -2,42 +2,58 @@ name: 每天更新 IP 数据库
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *'   # 每天 UTC 0:00 运行
+  workflow_dispatch:        # 允许手动触发
 
 jobs:
   update-database:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write        # 关键：授予推送到仓库的权限
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: 下载最新的 qqwry.ipdb
+
+    - name: 使用 CDN 下载最新的 qqwry-raw.ipdb
       run: |
-        echo "正在下载最新数据库..."
-        curl -L -o qqwry.ipdb "https://cdn.1008.site/gh/nmgliangwei/qqwry.ipdb@main/qqwry.ipdb"
+        echo "正在从 CDN 下载 qqwry-raw.ipdb ..."
+        # 使用你提供的 CDN 链接下载
+        curl -L -o qqwry-raw.ipdb "https://cdn.1008.site/gh/nmgliangwei/qqwry.ipdb@main/qqwry-raw.ipdb"
         
-        if [ ! -f qqwry.ipdb ]; then
-          echo "❌ 下载失败"
+        # 检查下载是否成功且文件大小合理（原版数据库通常大于 1MB）
+        if [ ! -f qqwry-raw.ipdb ]; then
+          echo "❌ 下载失败：文件不存在"
           exit 1
         fi
         
-        ls -lh qqwry.ipdb
-        md5sum qqwry.ipdb > qqwry.ipdb.md5
-    
-    - name: 创建版本信息
+        FILE_SIZE=$(wc -c < qqwry-raw.ipdb)
+        if [ "$FILE_SIZE" -lt 1000000 ]; then
+          echo "❌ 下载的文件过小 ($FILE_SIZE 字节)，可能不是有效的数据库文件"
+          exit 1
+        fi
+        
+        echo "✅ 下载成功！文件大小："
+        ls -lh qqwry-raw.ipdb
+        # 生成 MD5 校验文件
+        md5sum qqwry-raw.ipdb > qqwry-raw.ipdb.md5
+
+    - name: 创建版本信息文件
       run: |
         echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
-        echo "文件大小: $(ls -lh qqwry.ipdb | awk '{print $5}')" >> version.txt
-    
-    - name: 提交并推送
+        echo "文件: qqwry-raw.ipdb" >> version.txt
+        echo "文件大小: $(ls -lh qqwry-raw.ipdb | awk '{print $5}')" >> version.txt
+
+    - name: 提交并推送更改到仓库
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        git add qqwry.ipdb qqwry.ipdb.md5 version.txt
-        git diff --staged --quiet || git commit -m "🤖 自动更新 IP 数据库 - $(date '+%Y-%m-%d')"
+        # 添加新下载的文件和版本信息
+        git add qqwry-raw.ipdb qqwry-raw.ipdb.md5 version.txt
+        
+        # 仅在文件有变化时提交（避免空提交）
+        git diff --staged --quiet || git commit -m "🤖 自动更新 IP 数据库 (qqwry-raw) - $(date '+%Y-%m-%d')"
+        
+        # 推送到 main 分支
         git push origin main
