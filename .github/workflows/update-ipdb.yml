@@ -12,68 +12,69 @@ jobs:
       contents: write
     
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: 下载 qqwry-raw.ipdb
-      run: |
-        echo "开始下载..."
-        curl -L -o qqwry-raw.ipdb \
-          "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry-raw.ipdb"
-        
-        file_size=$(stat -c%s qqwry-raw.ipdb)
-        echo "下载文件大小: $file_size 字节"
-        
-        if [ $file_size -lt 1000000 ]; then
-          echo "❌ 文件太小"
-          exit 1
-        fi
-        
-        echo "✅ 下载成功"
-        ls -lh qqwry-raw.ipdb
-        md5sum qqwry-raw.ipdb > qqwry-raw.ipdb.md5
-    
-    - name: 安装 s3cmd
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y s3cmd
-    
-    - name: 上传到 R2
-      env:
-        R2_ACCESS_KEY: ${{d44a21a8c1604a4127d998d46325c4e4}}
-        R2_SECRET_KEY: ${{339548d6f71d1f136da87bf927df1b1e886fb7374fbf4ac219c59f051c7007e8
-}}
-        R2_ENDPOINT: "https://${{cc057720e5a172a42c6d15693016bf33}}.r2.cloudflarestorage.com"
-        R2_BUCKET: ${{ipdb-storage}}
-      run: |
-        cat > ~/.s3cfg << EOF
-        [default]
-        access_key = $R2_ACCESS_KEY
-        secret_key = $R2_SECRET_KEY
-        hot_base = $(echo $R2_ENDPOINT | sed 's|https://||')
-        hot_bucket = $(echo $R2_ENDPOINT | sed 's|https://||')
-        use_https = True
-        EOF
-        
-        s3cmd put qqwry-raw.ipdb s3://$R2_BUCKET/qqwry-raw.ipdb
-        s3cmd put qqwry-raw.ipdb.md5 s3://$R2_BUCKET/qqwry-raw.ipdb.md5
-        
-        echo "✅ 已上传到 R2"
-    
-    - name: 创建版本信息
-      run: |
-        echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
-        echo "文件大小: $(ls -lh qqwry-raw.ipdb | awk '{print $5}')" >> version.txt
-    
-    - name: 提交并推送
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        git pull origin main --rebase || true
-        git add qqwry-raw.ipdb qqwry-raw.ipdb.md5 version.txt
-        git diff --staged --quiet || git commit -m "🤖 更新 IP 数据库 - $(date '+%Y-%m-%d')"
-        git pull origin main --rebase || true
-        git push origin main
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 下载 qqwry-raw.ipdb
+        run: |
+          echo "开始下载..."
+          curl -L -o qqwry-raw.ipdb \
+            "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry-raw.ipdb"
+          
+          file_size=$(stat -c%s qqwry-raw.ipdb)
+          echo "下载文件大小: $file_size 字节"
+          
+          if [ $file_size -lt 1000000 ]; then
+            echo "❌ 文件太小"
+            exit 1
+          fi
+          
+          echo "✅ 下载成功"
+          ls -lh qqwry-raw.ipdb
+          md5sum qqwry-raw.ipdb > qqwry-raw.ipdb.md5
+      
+      - name: 安装 s3cmd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y s3cmd
+      
+      - name: 上传到 R2
+        env:
+          R2_ACCESS_KEY: d44a21a8c1604a4127d998d46325c4e4
+          R2_SECRET_KEY: 339548d6f71d1f136da87bf927df1b1e886fb7374fbf4ac219c59f051c7007e8
+          R2_ENDPOINT: https://cc057720e5a172a42c6d15693016bf33.r2.cloudflarestorage.com
+          R2_BUCKET: ipdb-storage
+        run: |
+          # 配置 s3cmd
+          cat > ~/.s3cfg << EOF
+          [default]
+          access_key = $R2_ACCESS_KEY
+          secret_key = $R2_SECRET_KEY
+          host_base = $(echo $R2_ENDPOINT | sed 's|https://||')
+          host_bucket = $(echo $R2_ENDPOINT | sed 's|https://||')
+          use_https = True
+          EOF
+          
+          # 上传文件
+          s3cmd put qqwry-raw.ipdb s3://$R2_BUCKET/qqwry-raw.ipdb
+          s3cmd put qqwry-raw.ipdb.md5 s3://$R2_BUCKET/qqwry-raw.ipdb.md5
+          
+          echo "✅ 已上传到 R2"
+      
+      - name: 创建版本信息
+        run: |
+          echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
+          echo "文件大小: $(ls -lh qqwry-raw.ipdb | awk '{print $5}')" >> version.txt
+      
+      - name: 提交并推送
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git pull origin main --rebase || true
+          git add qqwry-raw.ipdb qqwry-raw.ipdb.md5 version.txt
+          git diff --staged --quiet || git commit -m "🤖 更新 IP 数据库 - $(date '+%Y-%m-%d')"
+          git pull origin main --rebase || true
+          git push origin main
