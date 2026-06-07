@@ -1,0 +1,43 @@
+name: 每天更新 IP 数据库
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-database:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: 下载最新的 qqwry.ipdb
+      run: |
+        echo "正在下载最新数据库..."
+        curl -L -o qqwry.ipdb "https://cdn.1008.site/gh/nmgliangwei/qqwry.ipdb@main/qqwry.ipdb"
+        
+        if [ ! -f qqwry.ipdb ]; then
+          echo "❌ 下载失败"
+          exit 1
+        fi
+        
+        ls -lh qqwry.ipdb
+        md5sum qqwry.ipdb > qqwry.ipdb.md5
+    
+    - name: 创建版本信息
+      run: |
+        echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
+        echo "文件大小: $(ls -lh qqwry.ipdb | awk '{print $5}')" >> version.txt
+    
+    - name: 提交并推送
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git add qqwry.ipdb qqwry.ipdb.md5 version.txt
+        git diff --staged --quiet || git commit -m "🤖 自动更新 IP 数据库 - $(date '+%Y-%m-%d')"
+        git push origin main
