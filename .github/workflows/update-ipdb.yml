@@ -21,7 +21,7 @@ jobs:
         run: |
           echo "开始下载..."
           curl -L -o qqwry-raw.ipdb \
-            "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry-raw.ipdb"
+            "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry.ipdb"
           
           file_size=$(stat -c%s qqwry-raw.ipdb)
           echo "下载文件大小: $file_size 字节"
