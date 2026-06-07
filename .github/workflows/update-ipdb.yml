@@ -2,58 +2,68 @@ name: 每天更新 IP 数据库
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 每天 UTC 0:00 运行
-  workflow_dispatch:        # 允许手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   update-database:
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # 关键：授予推送到仓库的权限
-
+      contents: write
+    
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
-
-    - name: 使用 CDN 下载最新的 qqwry-raw.ipdb
+    
+    - name: 从 GitHub Release 下载 qqwry-raw.ipdb
       run: |
-        echo "正在从 CDN 下载 qqwry-raw.ipdb ..."
-        # 使用你提供的 CDN 链接下载
-        curl -L -o qqwry-raw.ipdb "https://cdn.1008.site/gh/nmgliangwei/qqwry.ipdb@main/qqwry-raw.ipdb"
+        echo "开始下载 qqwry-raw.ipdb ..."
         
-        # 检查下载是否成功且文件大小合理（原版数据库通常大于 1MB）
-        if [ ! -f qqwry-raw.ipdb ]; then
-          echo "❌ 下载失败：文件不存在"
+        # 方法1: 直接从最新 Release 下载
+        curl -L -o qqwry-raw.ipdb \
+          "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry-raw.ipdb" \
+          -H "User-Agent: Mozilla/5.0"
+        
+        # 检查大小
+        if [ -f qqwry-raw.ipdb ]; then
+          FILE_SIZE=$(stat -c%s qqwry-raw.ipdb 2>/dev/null || stat -f%z qqwry-raw.ipdb 2>/dev/null)
+          echo "文件大小: $FILE_SIZE 字节"
+          
+          if [ "$FILE_SIZE" -gt 1000000 ]; then
+            echo "✅ 下载成功"
+          else
+            echo "文件太小，尝试备用方法..."
+            # 方法2: 使用具体版本号
+            curl -L -o qqwry-raw.ipdb \
+              "https://github.com/nmgliangwei/qqwry.ipdb/releases/download/20260603/qqwry-raw.ipdb" \
+              -H "User-Agent: Mozilla/5.0"
+            
+            FILE_SIZE2=$(stat -c%s qqwry-raw.ipdb 2>/dev/null || stat -f%z qqwry-raw.ipdb 2>/dev/null)
+            if [ "$FILE_SIZE2" -lt 1000000 ]; then
+              echo "❌ 下载失败"
+              exit 1
+            fi
+          fi
+        else
+          echo "❌ 文件不存在"
           exit 1
         fi
         
-        FILE_SIZE=$(wc -c < qqwry-raw.ipdb)
-        if [ "$FILE_SIZE" -lt 1000000 ]; then
-          echo "❌ 下载的文件过小 ($FILE_SIZE 字节)，可能不是有效的数据库文件"
-          exit 1
-        fi
-        
-        echo "✅ 下载成功！文件大小："
         ls -lh qqwry-raw.ipdb
-        # 生成 MD5 校验文件
         md5sum qqwry-raw.ipdb > qqwry-raw.ipdb.md5
-
-    - name: 创建版本信息文件
+    
+    - name: 创建版本信息
       run: |
         echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
         echo "文件: qqwry-raw.ipdb" >> version.txt
         echo "文件大小: $(ls -lh qqwry-raw.ipdb | awk '{print $5}')" >> version.txt
-
-    - name: 提交并推送更改到仓库
+        echo "MD5: $(cut -d' ' -f1 qqwry-raw.ipdb.md5)" >> version.txt
+    
+    - name: 提交并推送
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        # 添加新下载的文件和版本信息
         git add qqwry-raw.ipdb qqwry-raw.ipdb.md5 version.txt
-        
-        # 仅在文件有变化时提交（避免空提交）
-        git diff --staged --quiet || git commit -m "🤖 自动更新 IP 数据库 (qqwry-raw) - $(date '+%Y-%m-%d')"
-        
-        # 推送到 main 分支
+        git diff --staged --quiet || git commit -m "🤖 自动更新 IP 数据库 - $(date '+%Y-%m-%d')"
         git push origin main
