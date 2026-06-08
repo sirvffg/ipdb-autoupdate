@@ -75,13 +75,54 @@ jobs:
             echo "❌ GeoCN 数据库下载失败"
           fi
       
-      # ========== 3. 安装上传工具 ==========
+      # ========== 3. 下载行政区划数据 (用于 GeoCN division_code 解析) ==========
+      - name: 下载行政区划数据 (full.txt / short.txt)
+        run: |
+          echo "开始下载行政区划数据..."
+          
+          # 下载 full.txt (全称: 北京市/东城区/朝阳区)
+          curl -L -o full.txt \
+            "https://raw.githubusercontent.com/ljxi/GeoCN/main/data/full.txt"
+          
+          if [ -f full.txt ]; then
+            fs=$(stat -c%s full.txt)
+            echo "full.txt 大小: $fs 字节"
+            if [ $fs -gt 1000 ]; then
+              echo "✅ full.txt 下载成功"
+              md5sum full.txt > full.txt.md5
+            else
+              echo "❌ full.txt 下载失败（文件太小）"
+              rm -f full.txt
+            fi
+          else
+            echo "❌ full.txt 下载失败"
+          fi
+          
+          # 下载 short.txt (简称: 北京/东城/朝阳)
+          curl -L -o short.txt \
+            "https://raw.githubusercontent.com/ljxi/GeoCN/main/data/short.txt"
+          
+          if [ -f short.txt ]; then
+            fs=$(stat -c%s short.txt)
+            echo "short.txt 大小: $fs 字节"
+            if [ $fs -gt 1000 ]; then
+              echo "✅ short.txt 下载成功"
+              md5sum short.txt > short.txt.md5
+            else
+              echo "❌ short.txt 下载失败（文件太小）"
+              rm -f short.txt
+            fi
+          else
+            echo "❌ short.txt 下载失败"
+          fi
+      
+      # ========== 4. 安装上传工具 ==========
       - name: 安装 s3cmd
         run: |
           sudo apt-get update
           sudo apt-get install -y s3cmd
       
-      # ========== 4. 上传到 R2 ==========
+      # ========== 5. 上传到 R2 ==========
       - name: 上传到 R2
         env:
           R2_ACCESS_KEY: d44a21a8c1604a4127d998d46325c4e4
@@ -113,9 +154,26 @@ jobs:
             echo "⚠️ GeoCN 数据库不存在，跳过上传"
           fi
           
+          # 上传行政区划数据 (R2 key: data/full.txt, data/short.txt)
+          if [ -f full.txt ]; then
+            s3cmd put full.txt s3://$R2_BUCKET/data/full.txt
+            s3cmd put full.txt.md5 s3://$R2_BUCKET/data/full.txt.md5
+            echo "✅ full.txt 行政区划数据已上传"
+          else
+            echo "⚠️ full.txt 不存在，跳过上传"
+          fi
+          
+          if [ -f short.txt ]; then
+            s3cmd put short.txt s3://$R2_BUCKET/data/short.txt
+            s3cmd put short.txt.md5 s3://$R2_BUCKET/data/short.txt.md5
+            echo "✅ short.txt 行政区划数据已上传"
+          else
+            echo "⚠️ short.txt 不存在，跳过上传"
+          fi
+          
           echo "✅ 所有文件上传完成"
       
-      # ========== 5. 创建版本信息 ==========
+      # ========== 6. 创建版本信息 ==========
       - name: 创建版本信息
         run: |
           echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
@@ -138,9 +196,22 @@ jobs:
             echo "GeoCN 状态: ❌ 下载失败" >> version.txt
           fi
           
+          echo "" >> version.txt
+          echo "行政区划数据 (GeoCN division_code 解析):" >> version.txt
+          if [ -f full.txt ]; then
+            echo "  full.txt (全称): ✅ $(ls -lh full.txt | awk '{print $5}')" >> version.txt
+          else
+            echo "  full.txt (全称): ❌ 下载失败" >> version.txt
+          fi
+          if [ -f short.txt ]; then
+            echo "  short.txt (简称): ✅ $(ls -lh short.txt | awk '{print $5}')" >> version.txt
+          else
+            echo "  short.txt (简称): ❌ 下载失败" >> version.txt
+          fi
+          
           echo "===================================" >> version.txt
       
-      # ========== 6. 提交并推送到 GitHub ==========
+      # ========== 7. 提交并推送到 GitHub ==========
       - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
@@ -157,6 +228,14 @@ jobs:
             git add GeoCN.mmdb GeoCN.mmdb.md5
           fi
           
+          # 添加行政区划数据文件
+          if [ -f full.txt ]; then
+            git add full.txt full.txt.md5
+          fi
+          if [ -f short.txt ]; then
+            git add short.txt short.txt.md5
+          fi
+          
           git add version.txt
           
           # 提交
@@ -164,6 +243,7 @@ jobs:
           
           - 纯真标准版: 日常更新
           - GeoCN 高精度: $(if [ -f GeoCN.mmdb ]; then echo '已更新'; else echo '下载失败'; fi)
+          - 行政区划数据: $(if [ -f full.txt ] && [ -f short.txt ]; then echo '已更新'; else echo '部分失败'; fi)
           - 来源: GitHub (nmliangwei/qqwry.ipdb + ljxi/GeoCN)"
           
           # 推送
