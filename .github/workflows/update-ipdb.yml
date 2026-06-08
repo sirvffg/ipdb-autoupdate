@@ -17,30 +17,71 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: 下载标准版 IP 数据库
+      # ========== 1. 下载纯真标准版数据库 ==========
+      - name: 下载纯真标准版 IP 数据库
         run: |
-          echo "开始下载标准版 IP 数据库..."
-          # 使用标准版数据库（有完整的中文字段）
+          echo "开始下载纯真标准版 IP 数据库..."
           curl -L -o qqwry.ipdb \
             "https://github.com/nmgliangwei/qqwry.ipdb/releases/latest/download/qqwry.ipdb"
           
           file_size=$(stat -c%s qqwry.ipdb)
-          echo "下载文件大小: $file_size 字节"
+          echo "纯真数据库大小: $file_size 字节"
           
           if [ $file_size -lt 1000000 ]; then
-            echo "❌ 文件太小，下载失败"
+            echo "❌ 纯真数据库下载失败（文件太小）"
             exit 1
           fi
           
-          echo "✅ 下载成功"
+          echo "✅ 纯真数据库下载成功"
           ls -lh qqwry.ipdb
           md5sum qqwry.ipdb > qqwry.ipdb.md5
       
+      # ========== 2. 从 GitHub 下载 GeoCN 数据库 ==========
+      - name: 从 GitHub 下载 GeoCN 中国高精度数据库
+        run: |
+          echo "开始从 GitHub 下载 GeoCN 数据库..."
+          
+          # 方法1：从 GitHub Release 下载（推荐）
+          echo "尝试从 GitHub Release 下载..."
+          curl -L -o GeoCN.mmdb \
+            "https://github.com/ljxi/GeoCN/releases/latest/download/GeoCN.mmdb"
+          
+          # 检查下载是否成功
+          if [ -f GeoCN.mmdb ]; then
+            file_size=$(stat -c%s GeoCN.mmdb)
+            echo "下载文件大小: $file_size 字节"
+            
+            if [ $file_size -gt 100000 ]; then
+              echo "✅ GeoCN 数据库下载成功"
+              ls -lh GeoCN.mmdb
+              md5sum GeoCN.mmdb > GeoCN.mmdb.md5
+            else
+              echo "⚠️ 文件过小，尝试从仓库直接下载..."
+              # 方法2：从仓库的 db 目录下载
+              curl -L -o GeoCN.mmdb \
+                "https://raw.githubusercontent.com/ljxi/GeoCN/main/db/GeoCN.mmdb"
+              
+              file_size2=$(stat -c%s GeoCN.mmdb)
+              if [ $file_size2 -gt 100000 ]; then
+                echo "✅ GeoCN 数据库下载成功（从仓库）"
+                ls -lh GeoCN.mmdb
+                md5sum GeoCN.mmdb > GeoCN.mmdb.md5
+              else
+                echo "❌ GeoCN 数据库下载失败"
+                rm -f GeoCN.mmdb
+              fi
+            fi
+          else
+            echo "❌ GeoCN 数据库下载失败"
+          fi
+      
+      # ========== 3. 安装上传工具 ==========
       - name: 安装 s3cmd
         run: |
           sudo apt-get update
           sudo apt-get install -y s3cmd
       
+      # ========== 4. 上传到 R2 ==========
       - name: 上传到 R2
         env:
           R2_ACCESS_KEY: d44a21a8c1604a4127d998d46325c4e4
@@ -58,26 +99,73 @@ jobs:
           use_https = True
           EOF
           
-          # 上传标准版数据库到 R2
+          # 上传纯真数据库
           s3cmd put qqwry.ipdb s3://$R2_BUCKET/qqwry.ipdb
           s3cmd put qqwry.ipdb.md5 s3://$R2_BUCKET/qqwry.ipdb.md5
+          echo "✅ 纯真数据库已上传"
           
-          echo "✅ 已上传到 R2"
+          # 上传 GeoCN 数据库（如果存在）
+          if [ -f GeoCN.mmdb ]; then
+            s3cmd put GeoCN.mmdb s3://$R2_BUCKET/GeoCN.mmdb
+            s3cmd put GeoCN.mmdb.md5 s3://$R2_BUCKET/GeoCN.mmdb.md5
+            echo "✅ GeoCN 数据库已上传到 R2"
+          else
+            echo "⚠️ GeoCN 数据库不存在，跳过上传"
+          fi
+          
+          echo "✅ 所有文件上传完成"
       
+      # ========== 5. 创建版本信息 ==========
       - name: 创建版本信息
         run: |
           echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
-          echo "数据库版本: 标准版" >> version.txt
-          echo "文件大小: $(ls -lh qqwry.ipdb | awk '{print $5}')" >> version.txt
-          echo "MD5: $(cut -d' ' -f1 qqwry.ipdb.md5)" >> version.txt
+          echo "===================================" >> version.txt
+          echo "纯真数据库 (标准版):" >> version.txt
+          echo "  文件: qqwry.ipdb" >> version.txt
+          echo "  大小: $(ls -lh qqwry.ipdb | awk '{print $5}')" >> version.txt
+          echo "  MD5: $(cut -d' ' -f1 qqwry.ipdb.md5)" >> version.txt
+          echo "" >> version.txt
+          
+          if [ -f GeoCN.mmdb ]; then
+            echo "GeoCN 数据库 (中国高精度):" >> version.txt
+            echo "  文件: GeoCN.mmdb" >> version.txt
+            echo "  大小: $(ls -lh GeoCN.mmdb | awk '{print $5}')" >> version.txt
+            echo "  MD5: $(cut -d' ' -f1 GeoCN.mmdb.md5)" >> version.txt
+            echo "  来源: GitHub (ljxi/GeoCN)" >> version.txt
+            echo "" >> version.txt
+            echo "GeoCN 状态: ✅ 已下载" >> version.txt
+          else
+            echo "GeoCN 状态: ❌ 下载失败" >> version.txt
+          fi
+          
+          echo "===================================" >> version.txt
       
+      # ========== 6. 提交并推送到 GitHub ==========
       - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
+          # 拉取最新代码
           git pull origin main --rebase || true
-          git add qqwry.ipdb qqwry.ipdb.md5 version.txt
-          git diff --staged --quiet || git commit -m "🤖 更新标准版 IP 数据库 - $(date '+%Y-%m-%d')"
+          
+          # 添加纯真数据库文件
+          git add qqwry.ipdb qqwry.ipdb.md5
+          
+          # 如果有 GeoCN 文件就添加
+          if [ -f GeoCN.mmdb ]; then
+            git add GeoCN.mmdb GeoCN.mmdb.md5
+          fi
+          
+          git add version.txt
+          
+          # 提交
+          git diff --staged --quiet || git commit -m "🤖 更新 IP 数据库 - $(date '+%Y-%m-%d')
+          
+          - 纯真标准版: 日常更新
+          - GeoCN 高精度: $(if [ -f GeoCN.mmdb ]; then echo '已更新'; else echo '下载失败'; fi)
+          - 来源: GitHub (nmliangwei/qqwry.ipdb + ljxi/GeoCN)"
+          
+          # 推送
           git pull origin main --rebase || true
           git push origin main
