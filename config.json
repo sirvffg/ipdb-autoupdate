@@ -1,0 +1,7 @@
+{
+  "mode": "qqwry_geocn",
+  "modes": {
+    "qqwry_only": "仅纯真数据库 (兜底模式，不依赖 GeoCN 和行政区划数据)",
+    "qqwry_geocn": "纯真 + GeoCN (国内 IP 用 GeoCN 高精度，国外用纯真)"
+  }
+}
