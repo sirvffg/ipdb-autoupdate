@@ -171,6 +171,14 @@ jobs:
             echo "⚠️ short.txt 不存在，跳过上传"
           fi
           
+          # 上传运行时配置文件
+          if [ -f config.json ]; then
+            s3cmd put config.json s3://$R2_BUCKET/config.json
+            echo "✅ config.json 已上传到 R2"
+          else
+            echo "⚠️ config.json 不存在，跳过上传"
+          fi
+          
           echo "✅ 所有文件上传完成"
       
       # ========== 6. 创建版本信息 ==========
