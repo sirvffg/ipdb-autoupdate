@@ -1,4 +1,4 @@
-更新时间: 2026-10-19 09:47:43
+更新时间: 2026-10-19 09:55:46
 ===================================
 
 【IP 归属地】
@@ -7,13 +7,13 @@
   qqwry.ipdb:       ✅ 39M
 
 【GPS 逆地理】
-  china.full.gtc:         ❌ 下载失败
+  china.full.gtc:         ✅ 6.0M
   polygons.json.gz:       ✅ 4.0M
   metadata.json.gz:       ✅ 4.3K
   geohash_index.json.gz:  ✅ 70K
 
 来源:
-  ip2region:    gitee.com/lionsoul/ip2region
+  ip2region:    github.com/lionsoul2014/ip2region
   qqwry:        github.com/nmgliangwei/qqwry.ipdb
   china.full.gtc:  github.com/ljxi/GeoCN
   geo-intel:    github.com/RRJena/geo-intel-offline-javascript
