@@ -1,19 +1,19 @@
-更新时间: 2026-10-19 02:21:32
+更新时间: 2026-10-19 08:41:01
 ===================================
+ip2region 离线库:
+  ip2region_v4.xdb: ✅ 11M
+  ip2region_v6.xdb: ✅ 36M
+  来源: Gitee lionsoul/ip2region
+
 纯真数据库 (标准版):
   文件: qqwry.ipdb
   大小: 39M
   MD5: f0c89cba99fb480996c502cafe55d625
 
-GeoCN 数据库 (中国高精度):
+GeoCN 数据库:
   文件: GeoCN.mmdb
   大小: 8.7M
   MD5: dd3309f67bf3f03d588cbab0fd96fc5f
-  来源: GitHub (ljxi/GeoCN)
+✅ GeoCN 已下载
 
-GeoCN 状态: ✅ 已下载
-
-行政区划数据 (GeoCN division_code 解析):
-  full.txt (全称): ✅ 64K
-  short.txt (简称): ✅ 55K
 ===================================
