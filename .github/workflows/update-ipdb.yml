@@ -17,13 +17,12 @@ jobs:
         with:
           fetch-depth: 0
       
-      # ========== 1. 下载 ip2region v4 + v6（Gitee 主，GitHub 回退）==========
+      # ========== 1. 下载 ip2region v4 + v6（GitHub）==========
       - name: 下载 ip2region 离线库
         run: |
           echo "========== ip2region v4 =========="
           IP2REGION_V4=""
           for url in \
-            "https://gitee.com/lionsoul/ip2region/raw/master/data/ip2region_v4.xdb" \
             "https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region_v4.xdb"; do
             echo "尝试: $url"
             if curl -fsSL -o ip2region_v4.xdb "$url"; then
@@ -41,13 +40,12 @@ jobs:
               echo "⚠️ 下载失败"
             fi
           done
-          [ -z "$IP2REGION_V4" ] && echo "❌ ip2region_v4.xdb 所有源均失败"
+          [ -z "$IP2REGION_V4" ] && echo "❌ ip2region_v4.xdb 下载失败"
 
           echo ""
           echo "========== ip2region v6 =========="
           IP2REGION_V6=""
           for url in \
-            "https://gitee.com/lionsoul/ip2region/raw/master/data/ip2region_v6.xdb" \
             "https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region_v6.xdb"; do
             echo "尝试: $url"
             if curl -fsSL -o ip2region_v6.xdb "$url"; then
@@ -65,7 +63,7 @@ jobs:
               echo "⚠️ 下载失败"
             fi
           done
-          [ -z "$IP2REGION_V6" ] && echo "❌ ip2region_v6.xdb 所有源均失败"
+          [ -z "$IP2REGION_V6" ] && echo "❌ ip2region_v6.xdb 下载失败"
 
           ls -lh ip2region_v4.xdb ip2region_v6.xdb 2>/dev/null || true
       
@@ -88,31 +86,34 @@ jobs:
           ls -lh qqwry.ipdb
           md5sum qqwry.ipdb > qqwry.ipdb.md5
 
-      # ========== 3. 下载 china.full.gtc（GeoCN 中国高精度逆地理）==========
-      - name: 下载 china.full.gtc (GeoCN)
+      # ========== 3. 提取 china.full.gtc（GeoToolCN 中国高精度逆地理）==========
+      # china.full.gtc 不在 GitHub 源码仓库，是 npm 包发布时注入的二进制数据，
+      # 需通过 npm pack tarball 下载再解压
+      - name: 提取 china.full.gtc (GeoToolCN)
         run: |
           echo "========== china.full.gtc =========="
           GTC_OK=""
-          for url in \
-            "https://gitee.com/ljxi/GeoCN/raw/main/db/china.full.gtc" \
-            "https://raw.githubusercontent.com/ljxi/GeoCN/main/db/china.full.gtc"; do
-            echo "尝试: $url"
-            if curl -fsSL -o china.full.gtc "$url"; then
-              fs=$(stat -c%s china.full.gtc 2>/dev/null || echo 0)
-              if [ "$fs" -gt 1000000 ]; then
-                echo "✅ china.full.gtc 下载成功 ($fs bytes)"
-                md5sum china.full.gtc > china.full.gtc.md5
-                GTC_OK="ok"
-                break
-              else
-                echo "⚠️ 文件过小 ($fs)，跳过"
-                rm -f china.full.gtc
-              fi
+          (
+            npm pack @geotoolcn/core --silent && \
+            tar -xzf geotoolcn-core-*.tgz && \
+            cp package/data/china.full.gtc ./china.full.gtc
+          ) || true
+          rm -rf package geotoolcn-core-*.tgz 2>/dev/null || true
+
+          if [ -f china.full.gtc ]; then
+            fs=$(stat -c%s china.full.gtc 2>/dev/null || echo 0)
+            if [ "$fs" -gt 1000000 ]; then
+              echo "✅ china.full.gtc 提取成功 ($fs bytes)"
+              md5sum china.full.gtc > china.full.gtc.md5
+              GTC_OK="ok"
             else
-              echo "⚠️ 下载失败"
+              echo "❌ china.full.gtc 文件过小 ($fs)"
+              rm -f china.full.gtc
             fi
-          done
-          [ -z "$GTC_OK" ] && echo "❌ china.full.gtc 所有源均失败"
+          else
+            echo "❌ china.full.gtc 提取失败"
+          fi
+          [ -z "$GTC_OK" ] && echo "❌ china.full.gtc 无法获取（GitHub 无公开 raw 源，npm 包下载也失败）"
           ls -lh china.full.gtc 2>/dev/null || true
 
       # ========== 4. 下载 geo-intel-offline 全球逆地理数据 ==========
@@ -246,7 +247,7 @@ jobs:
           echo "  geohash_index.json.gz:  $(if [ -f geohash_index.json.gz ]; then echo '✅ '$(ls -lh geohash_index.json.gz | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
           echo "" >> version.txt
           echo "来源:" >> version.txt
-          echo "  ip2region:    gitee.com/lionsoul/ip2region" >> version.txt
+          echo "  ip2region:    github.com/lionsoul2014/ip2region" >> version.txt
           echo "  qqwry:        github.com/nmgliangwei/qqwry.ipdb" >> version.txt
           echo "  china.full.gtc:  github.com/ljxi/GeoCN" >> version.txt
           echo "  geo-intel:    github.com/RRJena/geo-intel-offline-javascript" >> version.txt
