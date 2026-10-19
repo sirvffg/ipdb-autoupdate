@@ -1,10 +1,15 @@
-更新时间: 2026-10-19 09:55:46
+更新时间: 2026-10-19 13:14:28
 ===================================
 
 【IP 归属地】
   ip2region_v4.xdb: ✅ 11M
   ip2region_v6.xdb: ✅ 36M
   qqwry.ipdb:       ✅ 39M
+
+【另一项目用】
+  GeoCN.mmdb:       ✅ 8.7M
+  data/full.txt:    ✅ 64K
+  data/short.txt:   ✅ 55K
 
 【GPS 逆地理】
   china.full.gtc:         ✅ 6.0M
