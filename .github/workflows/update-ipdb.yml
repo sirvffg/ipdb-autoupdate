@@ -86,7 +86,56 @@ jobs:
           ls -lh qqwry.ipdb
           md5sum qqwry.ipdb > qqwry.ipdb.md5
 
-      # ========== 3. 提取 china.full.gtc（GeoToolCN 中国高精度逆地理）==========
+      # ========== 3. 下载 GeoCN.mmdb（另一个项目用的 IP 归属地 mmdb）==========
+      - name: 下载 GeoCN.mmdb
+        run: |
+          echo "========== GeoCN.mmdb =========="
+          GEOCN_OK=""
+          echo "尝试从 GitHub Release 下载..."
+          curl -fsSL -o GeoCN.mmdb \
+            "https://github.com/ljxi/GeoCN/releases/latest/download/GeoCN.mmdb" || true
+          if [ ! -f GeoCN.mmdb ]; then
+            echo "Release 失败，尝试仓库 raw..."
+            curl -fsSL -o GeoCN.mmdb \
+              "https://raw.githubusercontent.com/ljxi/GeoCN/main/db/GeoCN.mmdb" || true
+          fi
+          if [ -f GeoCN.mmdb ]; then
+            fs=$(stat -c%s GeoCN.mmdb 2>/dev/null || echo 0)
+            if [ "$fs" -gt 100000 ]; then
+              echo "✅ GeoCN.mmdb 下载成功 ($fs bytes)"
+              md5sum GeoCN.mmdb > GeoCN.mmdb.md5
+              GEOCN_OK="ok"
+            else
+              echo "❌ GeoCN.mmdb 文件过小 ($fs)"
+              rm -f GeoCN.mmdb
+            fi
+          fi
+          [ -z "$GEOCN_OK" ] && echo "❌ GeoCN.mmdb 下载失败"
+          ls -lh GeoCN.mmdb 2>/dev/null || true
+
+      # ========== 4. 下载行政区划 full.txt / short.txt（另一个项目用的）==========
+      - name: 下载行政区划数据
+        run: |
+          echo "========== full.txt / short.txt =========="
+          for f in full.txt short.txt; do
+            echo "--- $f ---"
+            curl -fsSL -o "$f" \
+              "https://raw.githubusercontent.com/ljxi/GeoCN/main/data/$f" || true
+            if [ -f "$f" ]; then
+              fs=$(stat -c%s "$f" 2>/dev/null || echo 0)
+              if [ "$fs" -gt 1000 ]; then
+                echo "✅ $f 下载成功 ($fs bytes)"
+                md5sum "$f" > "$f.md5"
+              else
+                echo "❌ $f 文件过小 ($fs)"
+                rm -f "$f"
+              fi
+            else
+              echo "❌ $f 下载失败"
+            fi
+          done
+
+      # ========== 5. 提取 china.full.gtc（GeoToolCN 中国高精度逆地理）==========
       # china.full.gtc 不在 GitHub 源码仓库，是 npm 包发布时注入的二进制数据，
       # 需通过 npm pack tarball 下载再解压
       - name: 提取 china.full.gtc (GeoToolCN)
@@ -116,7 +165,7 @@ jobs:
           [ -z "$GTC_OK" ] && echo "❌ china.full.gtc 无法获取（GitHub 无公开 raw 源，npm 包下载也失败）"
           ls -lh china.full.gtc 2>/dev/null || true
 
-      # ========== 4. 下载 geo-intel-offline 全球逆地理数据 ==========
+      # ========== 6. 下载 geo-intel-offline 全球逆地理数据 ==========
       - name: 下载 geo-intel-offline 全球逆地理数据
         run: |
           echo "========== geo-intel-offline data =========="
@@ -155,13 +204,13 @@ jobs:
           echo "geo-intel: $GI_OK / 3 下载成功"
           ls -lh polygons.json.gz metadata.json.gz geohash_index.json.gz 2>/dev/null || true
       
-      # ========== 5. 安装上传工具 ==========
+      # ========== 7. 安装上传工具 ==========
       - name: 安装 s3cmd
         run: |
           sudo apt-get update
           sudo apt-get install -y s3cmd
       
-      # ========== 6. 上传到 R2 ==========
+      # ========== 8. 上传到 R2 ==========
       - name: 上传到 R2
         env:
           R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
@@ -207,6 +256,27 @@ jobs:
             echo "✅ 纯真数据库已上传"
           fi
 
+          # GeoCN.mmdb（另一个项目用）
+          if [ -f GeoCN.mmdb ]; then
+            s3cmd put GeoCN.mmdb s3://$R2_BUCKET/GeoCN.mmdb
+            s3cmd put GeoCN.mmdb.md5 s3://$R2_BUCKET/GeoCN.mmdb.md5
+            echo "✅ GeoCN.mmdb 已上传"
+          else
+            echo "⚠️ GeoCN.mmdb 不存在，跳过"
+          fi
+
+          # 行政区划 full.txt / short.txt（另一个项目用，放在 data/ 前缀下）
+          if [ -f full.txt ]; then
+            s3cmd put full.txt s3://$R2_BUCKET/data/full.txt
+            s3cmd put full.txt.md5 s3://$R2_BUCKET/data/full.txt.md5
+            echo "✅ data/full.txt 已上传"
+          fi
+          if [ -f short.txt ]; then
+            s3cmd put short.txt s3://$R2_BUCKET/data/short.txt
+            s3cmd put short.txt.md5 s3://$R2_BUCKET/data/short.txt.md5
+            echo "✅ data/short.txt 已上传"
+          fi
+
           # china.full.gtc (GeoCN)
           if [ -f china.full.gtc ]; then
             s3cmd put china.full.gtc s3://$R2_BUCKET/china.full.gtc
@@ -229,7 +299,7 @@ jobs:
           
           echo "✅ 所有文件上传完成"
       
-      # ========== 7. 创建版本信息 ==========
+      # ========== 9. 创建版本信息 ==========
       - name: 创建版本信息
         run: |
           echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
@@ -239,6 +309,11 @@ jobs:
           echo "  ip2region_v4.xdb: $(if [ -f ip2region_v4.xdb ]; then echo '✅ '$(ls -lh ip2region_v4.xdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
           echo "  ip2region_v6.xdb: $(if [ -f ip2region_v6.xdb ]; then echo '✅ '$(ls -lh ip2region_v6.xdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
           echo "  qqwry.ipdb:       $(if [ -f qqwry.ipdb ]; then echo '✅ '$(ls -lh qqwry.ipdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
+          echo "" >> version.txt
+          echo "【另一项目用】" >> version.txt
+          echo "  GeoCN.mmdb:       $(if [ -f GeoCN.mmdb ]; then echo '✅ '$(ls -lh GeoCN.mmdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
+          echo "  data/full.txt:    $(if [ -f full.txt ]; then echo '✅ '$(ls -lh full.txt | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
+          echo "  data/short.txt:   $(if [ -f short.txt ]; then echo '✅ '$(ls -lh short.txt | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
           echo "" >> version.txt
           echo "【GPS 逆地理】" >> version.txt
           echo "  china.full.gtc:         $(if [ -f china.full.gtc ]; then echo '✅ '$(ls -lh china.full.gtc | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
@@ -254,7 +329,7 @@ jobs:
           echo "===================================" >> version.txt
           cat version.txt
       
-      # ========== 8. 提交并推送 ==========
+      # ========== 10. 提交并推送 ==========
       - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
@@ -262,13 +337,16 @@ jobs:
           
           git pull origin main --rebase || true
           
-          # 数据文件
+          # QuoIP 数据文件
           git add ip2region_v4.xdb ip2region_v4.xdb.md5 2>/dev/null || true
           git add ip2region_v6.xdb ip2region_v6.xdb.md5 2>/dev/null || true
           git add qqwry.ipdb qqwry.ipdb.md5 2>/dev/null || true
           git add china.full.gtc china.full.gtc.md5 2>/dev/null || true
           git add polygons.json.gz metadata.json.gz geohash_index.json.gz 2>/dev/null || true
           git add polygons.json.gz.md5 metadata.json.gz.md5 geohash_index.json.gz.md5 2>/dev/null || true
+          # 另一项目用的旧文件
+          git add GeoCN.mmdb GeoCN.mmdb.md5 2>/dev/null || true
+          git add full.txt full.txt.md5 short.txt short.txt.md5 2>/dev/null || true
           git add version.txt
           
           git diff --staged --quiet || git commit -m "🤖 更新 IP + GPS 数据库 - $(date '+%Y-%m-%d')
