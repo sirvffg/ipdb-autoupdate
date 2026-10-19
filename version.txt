@@ -1,19 +1,20 @@
-更新时间: 2026-10-19 08:41:01
+更新时间: 2026-10-19 09:47:43
 ===================================
-ip2region 离线库:
+
+【IP 归属地】
   ip2region_v4.xdb: ✅ 11M
   ip2region_v6.xdb: ✅ 36M
-  来源: Gitee lionsoul/ip2region
+  qqwry.ipdb:       ✅ 39M
 
-纯真数据库 (标准版):
-  文件: qqwry.ipdb
-  大小: 39M
-  MD5: f0c89cba99fb480996c502cafe55d625
+【GPS 逆地理】
+  china.full.gtc:         ❌ 下载失败
+  polygons.json.gz:       ✅ 4.0M
+  metadata.json.gz:       ✅ 4.3K
+  geohash_index.json.gz:  ✅ 70K
 
-GeoCN 数据库:
-  文件: GeoCN.mmdb
-  大小: 8.7M
-  MD5: dd3309f67bf3f03d588cbab0fd96fc5f
-✅ GeoCN 已下载
-
+来源:
+  ip2region:    gitee.com/lionsoul/ip2region
+  qqwry:        github.com/nmgliangwei/qqwry.ipdb
+  china.full.gtc:  github.com/ljxi/GeoCN
+  geo-intel:    github.com/RRJena/geo-intel-offline-javascript
 ===================================
