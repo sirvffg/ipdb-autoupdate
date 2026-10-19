@@ -17,7 +17,59 @@ jobs:
         with:
           fetch-depth: 0
       
-      # ========== 1. 下载纯真标准版数据库 ==========
+      # ========== 1. 下载 ip2region v4 + v6（Gitee 主，GitHub 回退）==========
+      - name: 下载 ip2region 离线库
+        run: |
+          echo "========== ip2region v4 =========="
+          IP2REGION_V4=""
+          for url in \
+            "https://gitee.com/lionsoul/ip2region/raw/master/data/ip2region_v4.xdb" \
+            "https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region_v4.xdb"; do
+            echo "尝试: $url"
+            if curl -fsSL -o ip2region_v4.xdb "$url"; then
+              fs=$(stat -c%s ip2region_v4.xdb 2>/dev/null || echo 0)
+              if [ "$fs" -gt 1000000 ]; then
+                echo "✅ ip2region_v4.xdb 下载成功 ($fs bytes)"
+                md5sum ip2region_v4.xdb > ip2region_v4.xdb.md5
+                IP2REGION_V4="ok"
+                break
+              else
+                echo "⚠️ 文件过小 ($fs)，跳过"
+                rm -f ip2region_v4.xdb
+              fi
+            else
+              echo "⚠️ 下载失败"
+            fi
+          done
+          [ -z "$IP2REGION_V4" ] && echo "❌ ip2region_v4.xdb 所有源均失败"
+
+          echo ""
+          echo "========== ip2region v6 =========="
+          IP2REGION_V6=""
+          for url in \
+            "https://gitee.com/lionsoul/ip2region/raw/master/data/ip2region_v6.xdb" \
+            "https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region_v6.xdb"; do
+            echo "尝试: $url"
+            if curl -fsSL -o ip2region_v6.xdb "$url"; then
+              fs=$(stat -c%s ip2region_v6.xdb 2>/dev/null || echo 0)
+              if [ "$fs" -gt 100000 ]; then
+                echo "✅ ip2region_v6.xdb 下载成功 ($fs bytes)"
+                md5sum ip2region_v6.xdb > ip2region_v6.xdb.md5
+                IP2REGION_V6="ok"
+                break
+              else
+                echo "⚠️ 文件过小 ($fs)，跳过"
+                rm -f ip2region_v6.xdb
+              fi
+            else
+              echo "⚠️ 下载失败"
+            fi
+          done
+          [ -z "$IP2REGION_V6" ] && echo "❌ ip2region_v6.xdb 所有源均失败"
+
+          ls -lh ip2region_v4.xdb ip2region_v6.xdb 2>/dev/null || true
+      
+      # ========== 2. 下载纯真标准版数据库 ==========
       - name: 下载纯真标准版 IP 数据库
         run: |
           echo "开始下载纯真标准版 IP 数据库..."
@@ -36,17 +88,15 @@ jobs:
           ls -lh qqwry.ipdb
           md5sum qqwry.ipdb > qqwry.ipdb.md5
       
-      # ========== 2. 从 GitHub 下载 GeoCN 数据库 ==========
+      # ========== 3. 从 GitHub 下载 GeoCN 数据库 ==========
       - name: 从 GitHub 下载 GeoCN 中国高精度数据库
         run: |
           echo "开始从 GitHub 下载 GeoCN 数据库..."
           
-          # 方法1：从 GitHub Release 下载（推荐）
           echo "尝试从 GitHub Release 下载..."
           curl -L -o GeoCN.mmdb \
             "https://github.com/ljxi/GeoCN/releases/latest/download/GeoCN.mmdb"
           
-          # 检查下载是否成功
           if [ -f GeoCN.mmdb ]; then
             file_size=$(stat -c%s GeoCN.mmdb)
             echo "下载文件大小: $file_size 字节"
@@ -57,7 +107,6 @@ jobs:
               md5sum GeoCN.mmdb > GeoCN.mmdb.md5
             else
               echo "⚠️ 文件过小，尝试从仓库直接下载..."
-              # 方法2：从仓库的 db 目录下载
               curl -L -o GeoCN.mmdb \
                 "https://raw.githubusercontent.com/ljxi/GeoCN/main/db/GeoCN.mmdb"
               
@@ -75,12 +124,11 @@ jobs:
             echo "❌ GeoCN 数据库下载失败"
           fi
       
-      # ========== 3. 下载行政区划数据 (用于 GeoCN division_code 解析) ==========
+      # ========== 4. 下载行政区划数据 (用于 GeoCN division_code 解析) ==========
       - name: 下载行政区划数据 (full.txt / short.txt)
         run: |
           echo "开始下载行政区划数据..."
           
-          # 下载 full.txt (全称: 北京市/东城区/朝阳区)
           curl -L -o full.txt \
             "https://raw.githubusercontent.com/ljxi/GeoCN/main/data/full.txt"
           
@@ -98,7 +146,6 @@ jobs:
             echo "❌ full.txt 下载失败"
           fi
           
-          # 下载 short.txt (简称: 北京/东城/朝阳)
           curl -L -o short.txt \
             "https://raw.githubusercontent.com/ljxi/GeoCN/main/data/short.txt"
           
@@ -116,21 +163,25 @@ jobs:
             echo "❌ short.txt 下载失败"
           fi
       
-      # ========== 4. 安装上传工具 ==========
+      # ========== 5. 安装上传工具 ==========
       - name: 安装 s3cmd
         run: |
           sudo apt-get update
           sudo apt-get install -y s3cmd
       
-      # ========== 5. 上传到 R2 ==========
+      # ========== 6. 上传到 R2 ==========
       - name: 上传到 R2
         env:
-          R2_ACCESS_KEY: d44a21a8c1604a4127d998d46325c4e4
-          R2_SECRET_KEY: 339548d6f71d1f136da87bf927df1b1e886fb7374fbf4ac219c59f051c7007e8
-          R2_ENDPOINT: https://cc057720e5a172a42c6d15693016bf33.r2.cloudflarestorage.com
-          R2_BUCKET: ipdb-storage
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
-          # 配置 s3cmd
+          if [ -z "$R2_ACCESS_KEY" ]; then
+            echo "❌ R2 secrets 未配置"
+            exit 1
+          fi
+
           cat > ~/.s3cfg << EOF
           [default]
           access_key = $R2_ACCESS_KEY
@@ -139,121 +190,101 @@ jobs:
           host_bucket = $(echo $R2_ENDPOINT | sed 's|https://||')
           use_https = True
           EOF
+
+          # ip2region
+          if [ -f ip2region_v4.xdb ]; then
+            s3cmd put ip2region_v4.xdb s3://$R2_BUCKET/ip2region_v4.xdb
+            s3cmd put ip2region_v4.xdb.md5 s3://$R2_BUCKET/ip2region_v4.xdb.md5
+            echo "✅ ip2region_v4.xdb 已上传"
+          else
+            echo "⚠️ ip2region_v4.xdb 不存在，跳过"
+          fi
+
+          if [ -f ip2region_v6.xdb ]; then
+            s3cmd put ip2region_v6.xdb s3://$R2_BUCKET/ip2region_v6.xdb
+            s3cmd put ip2region_v6.xdb.md5 s3://$R2_BUCKET/ip2region_v6.xdb.md5
+            echo "✅ ip2region_v6.xdb 已上传"
+          else
+            echo "⚠️ ip2region_v6.xdb 不存在，跳过"
+          fi
           
-          # 上传纯真数据库
+          # 纯真
           s3cmd put qqwry.ipdb s3://$R2_BUCKET/qqwry.ipdb
           s3cmd put qqwry.ipdb.md5 s3://$R2_BUCKET/qqwry.ipdb.md5
           echo "✅ 纯真数据库已上传"
           
-          # 上传 GeoCN 数据库（如果存在）
+          # GeoCN
           if [ -f GeoCN.mmdb ]; then
             s3cmd put GeoCN.mmdb s3://$R2_BUCKET/GeoCN.mmdb
             s3cmd put GeoCN.mmdb.md5 s3://$R2_BUCKET/GeoCN.mmdb.md5
-            echo "✅ GeoCN 数据库已上传到 R2"
+            echo "✅ GeoCN 数据库已上传"
           else
-            echo "⚠️ GeoCN 数据库不存在，跳过上传"
+            echo "⚠️ GeoCN 不存在，跳过"
           fi
           
-          # 上传行政区划数据 (R2 key: data/full.txt, data/short.txt)
+          # 行政区划
           if [ -f full.txt ]; then
             s3cmd put full.txt s3://$R2_BUCKET/data/full.txt
             s3cmd put full.txt.md5 s3://$R2_BUCKET/data/full.txt.md5
-            echo "✅ full.txt 行政区划数据已上传"
-          else
-            echo "⚠️ full.txt 不存在，跳过上传"
+            echo "✅ full.txt 已上传"
           fi
-          
           if [ -f short.txt ]; then
             s3cmd put short.txt s3://$R2_BUCKET/data/short.txt
             s3cmd put short.txt.md5 s3://$R2_BUCKET/data/short.txt.md5
-            echo "✅ short.txt 行政区划数据已上传"
-          else
-            echo "⚠️ short.txt 不存在，跳过上传"
-          fi
-          
-          # 上传运行时配置文件
-          if [ -f config.json ]; then
-            s3cmd put config.json s3://$R2_BUCKET/config.json
-            echo "✅ config.json 已上传到 R2"
-          else
-            echo "⚠️ config.json 不存在，跳过上传"
+            echo "✅ short.txt 已上传"
           fi
           
           echo "✅ 所有文件上传完成"
       
-      # ========== 6. 创建版本信息 ==========
+      # ========== 7. 创建版本信息 ==========
       - name: 创建版本信息
         run: |
           echo "更新时间: $(date '+%Y-%m-%d %H:%M:%S')" > version.txt
           echo "===================================" >> version.txt
+          echo "ip2region 离线库:" >> version.txt
+          echo "  ip2region_v4.xdb: $(if [ -f ip2region_v4.xdb ]; then echo '✅ '$(ls -lh ip2region_v4.xdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
+          echo "  ip2region_v6.xdb: $(if [ -f ip2region_v6.xdb ]; then echo '✅ '$(ls -lh ip2region_v6.xdb | awk '{print $5}'); else echo '❌ 下载失败'; fi)" >> version.txt
+          echo "  来源: Gitee lionsoul/ip2region" >> version.txt
+          echo "" >> version.txt
           echo "纯真数据库 (标准版):" >> version.txt
           echo "  文件: qqwry.ipdb" >> version.txt
           echo "  大小: $(ls -lh qqwry.ipdb | awk '{print $5}')" >> version.txt
           echo "  MD5: $(cut -d' ' -f1 qqwry.ipdb.md5)" >> version.txt
           echo "" >> version.txt
-          
           if [ -f GeoCN.mmdb ]; then
-            echo "GeoCN 数据库 (中国高精度):" >> version.txt
+            echo "GeoCN 数据库:" >> version.txt
             echo "  文件: GeoCN.mmdb" >> version.txt
             echo "  大小: $(ls -lh GeoCN.mmdb | awk '{print $5}')" >> version.txt
             echo "  MD5: $(cut -d' ' -f1 GeoCN.mmdb.md5)" >> version.txt
-            echo "  来源: GitHub (ljxi/GeoCN)" >> version.txt
-            echo "" >> version.txt
-            echo "GeoCN 状态: ✅ 已下载" >> version.txt
+            echo "✅ GeoCN 已下载" >> version.txt
           else
-            echo "GeoCN 状态: ❌ 下载失败" >> version.txt
+            echo "GeoCN: ❌ 下载失败" >> version.txt
           fi
           
           echo "" >> version.txt
-          echo "行政区划数据 (GeoCN division_code 解析):" >> version.txt
-          if [ -f full.txt ]; then
-            echo "  full.txt (全称): ✅ $(ls -lh full.txt | awk '{print $5}')" >> version.txt
-          else
-            echo "  full.txt (全称): ❌ 下载失败" >> version.txt
-          fi
-          if [ -f short.txt ]; then
-            echo "  short.txt (简称): ✅ $(ls -lh short.txt | awk '{print $5}')" >> version.txt
-          else
-            echo "  short.txt (简称): ❌ 下载失败" >> version.txt
-          fi
-          
           echo "===================================" >> version.txt
       
-      # ========== 7. 提交并推送到 GitHub ==========
+      # ========== 8. 提交并推送 ==========
       - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 拉取最新代码
           git pull origin main --rebase || true
           
-          # 添加纯真数据库文件
+          git add ip2region_v4.xdb ip2region_v4.xdb.md5 2>/dev/null || true
+          git add ip2region_v6.xdb ip2region_v6.xdb.md5 2>/dev/null || true
           git add qqwry.ipdb qqwry.ipdb.md5
-          
-          # 如果有 GeoCN 文件就添加
-          if [ -f GeoCN.mmdb ]; then
-            git add GeoCN.mmdb GeoCN.mmdb.md5
-          fi
-          
-          # 添加行政区划数据文件
-          if [ -f full.txt ]; then
-            git add full.txt full.txt.md5
-          fi
-          if [ -f short.txt ]; then
-            git add short.txt short.txt.md5
-          fi
-          
+          git add GeoCN.mmdb GeoCN.mmdb.md5 2>/dev/null || true
+          git add full.txt full.txt.md5 short.txt short.txt.md5 2>/dev/null || true
           git add version.txt
           
-          # 提交
           git diff --staged --quiet || git commit -m "🤖 更新 IP 数据库 - $(date '+%Y-%m-%d')
-          
+
+          - ip2region v4/v6: $(if [ -f ip2region_v4.xdb ]; then echo '已更新'; else echo '部分失败'; fi)
           - 纯真标准版: 日常更新
           - GeoCN 高精度: $(if [ -f GeoCN.mmdb ]; then echo '已更新'; else echo '下载失败'; fi)
-          - 行政区划数据: $(if [ -f full.txt ] && [ -f short.txt ]; then echo '已更新'; else echo '部分失败'; fi)
-          - 来源: GitHub (nmliangwei/qqwry.ipdb + ljxi/GeoCN)"
+          - 行政区划数据: $(if [ -f full.txt ] && [ -f short.txt ]; then echo '已更新'; else echo '部分失败'; fi)"
           
-          # 推送
           git pull origin main --rebase || true
           git push origin main
